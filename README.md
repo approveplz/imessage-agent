@@ -27,11 +27,31 @@ npm install
 
 ## Usage
 
-### Development
+### Display Recent Messages
 
 ```bash
 npm run dev
 ```
+
+### Export All Message History to Markdown
+
+```bash
+npm run export
+```
+
+This will:
+
+-   Fetch **all** messages from the configured contact
+-   Filter out reactions and non-text messages
+-   Sort newest first
+-   Export to `conversation.md`
+
+**Customize export:**
+Edit `export.ts` to change:
+
+-   `CONTACT_PHONE_NUMBER`: Phone number to export
+-   `OUTPUT_PATH`: Where to save the file
+-   `START_DATE` / `END_DATE`: Optional date range filter
 
 ### Build
 
@@ -55,7 +75,9 @@ npm run type-check
 
 -   ✅ Read messages from iMessage and SMS
 -   ✅ **Enhanced SMS text extraction** - reads from `attributedBody` field
+-   ✅ **Export full message history** to Markdown
 -   ✅ Filter messages by sender, date, and type
+-   ✅ Filter out reactions and non-text messages
 -   ✅ Send text messages (SDK feature)
 -   ✅ Send images (SDK feature)
 -   ✅ Automated message handling (SDK feature)
@@ -91,8 +113,13 @@ We use LangChain's battle-tested byte pattern matching algorithm to extract text
 
 ```
 imessage-agent/
-├── index.ts                  # Main application entry point
-├── messageTextEnhancer.ts    # SMS text extraction module
+├── types.ts                  # Shared TypeScript interfaces
+├── config.ts                 # Shared configuration constants
+├── messageService.ts         # Reusable message operations (fetch, filter, etc.)
+├── messageTextEnhancer.ts    # SMS text extraction from attributedBody
+├── messageExporter.ts        # Markdown export logic
+├── index.ts                  # Main app - display recent messages
+├── export.ts                 # Export script - save full history
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -100,18 +127,25 @@ imessage-agent/
 
 ## Configuration
 
-Update the phone number in `index.ts`:
+Update settings in `config.ts`:
 
 ```typescript
-const CONTACT_PHONE_NUMBER: string = '+1234567890';
-const MESSAGE_LIMIT: number = 20;
+export const CONTACT_PHONE_NUMBER: string = '+1234567890';
+export const MESSAGE_LIMIT: number = 20;
 ```
+
+All scripts (`index.ts`, `export.ts`) will use these shared values.
 
 ## Known Issues
 
--   **Reactions/Tapbacks**: Messages like "Loved 'text'" are extracted as text (not filtered)
 -   **Media-only messages**: Photos/videos without text correctly return `null`
--   **Emoji/Unicode**: Fully supported via UTF-8 decoding
+-   **Group chats**: Not tested extensively (focus is on 1-on-1 conversations)
+
+**What's Handled:**
+
+-   ✅ **Reactions filtered**: "Loved", "Liked", "Emphasized" messages are automatically removed
+-   ✅ **Emoji/Unicode**: Fully supported via UTF-8 decoding
+-   ✅ **SMS & iMessage**: Both message types supported
 
 ## Documentation
 

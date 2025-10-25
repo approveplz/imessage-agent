@@ -1,22 +1,7 @@
 import Database from 'better-sqlite3';
 import { homedir } from 'os';
 import { join } from 'path';
-
-// Define message interface based on SDK's Message type
-interface Message {
-    readonly id: string;
-    readonly guid: string;
-    readonly text: string | null;
-    readonly sender: string;
-    readonly senderName: string | null;
-    readonly chatId: string;
-    readonly isGroupChat: boolean;
-    readonly service: 'iMessage' | 'SMS' | 'RCS';
-    readonly isRead: boolean;
-    readonly isFromMe: boolean;
-    readonly attachments: readonly any[];
-    readonly date: Date;
-}
+import { Message, MessageQueryResult } from './types.js';
 
 /**
  * Extract text from attributedBody using byte pattern matching
@@ -148,11 +133,7 @@ export function enhanceMessages(messages: readonly Message[]): Message[] {
 /**
  * Wrapper to enhance a single message query result
  */
-export function enhanceMessageResult(result: {
-    messages: readonly Message[];
-    total: number;
-    unreadCount: number;
-}): {
+export function enhanceMessageResult(result: MessageQueryResult): {
     messages: Message[];
     total: number;
     unreadCount: number;
