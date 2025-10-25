@@ -4,6 +4,22 @@ import { Message, MessageQueryOptions } from './types.js';
 import { DEFAULT_SDK_OPTIONS } from './config.js';
 
 /**
+ * iMessage reaction verbs
+ * These are the words that appear at the start of reaction messages
+ */
+const REACTION_VERBS = [
+    'loved',
+    'liked',
+    'disliked',
+    'laughed at',
+    'emphasized',
+    'questioned',
+    'removed a heart from',
+    'removed a like from',
+    'removed an emphasis from',
+] as const;
+
+/**
  * Create and initialize an IMessageSDK instance
  */
 export function createSDK(debug: boolean = false): IMessageSDK {
@@ -15,27 +31,37 @@ export function createSDK(debug: boolean = false): IMessageSDK {
 
 /**
  * Check if a message is a reaction (Loved, Liked, etc.)
+ *
+ * Reactions have the format:
+ * - "Loved "original message"" (has quotes)
+ * - "Liked an image" (image/video reaction)
+ *
+ * Real messages don't have quotes:
+ * - "Loved the movie last night!" (no quotes = kept as real message)
+ *
+ * We check for quotes to avoid filtering legitimate messages.
  */
 export function isReaction(msg: Message): boolean {
     if (!msg.text) return false;
 
-    const text = msg.text.toLowerCase().trim();
+    const text = msg.text.trim();
+    const lowerText = text.toLowerCase();
 
-    // Check for reaction patterns (handle both regular and smart quotes)
-    const hasQuotes =
-        text.includes('"') || text.includes('"') || text.includes('"');
+    // Check if starts with any reaction verb
+    for (const verb of REACTION_VERBS) {
+        if (lowerText.startsWith(verb + ' ')) {
+            // Must contain quotes OR the word "image" to be a reaction
+            // This prevents filtering legitimate messages like "Loved the movie"
+            const hasQuotes =
+                text.includes('"') || text.includes('"') || text.includes('"');
+            const isImageReaction =
+                text.includes('an image') || text.includes('a video');
 
-    if (!hasQuotes) return false;
-
-    // Common reaction patterns
-    if (text.startsWith('loved ')) return true;
-    if (text.startsWith('liked ')) return true;
-    if (text.startsWith('disliked ')) return true;
-    if (text.startsWith('laughed at ')) return true;
-    if (text.startsWith('emphasized ')) return true;
-    if (text.startsWith('questioned ')) return true;
-    if (text.startsWith('removed a heart from ')) return true;
-    if (text.startsWith('removed a like from ')) return true;
+            if (hasQuotes || isImageReaction) {
+                return true;
+            }
+        }
+    }
 
     return false;
 }

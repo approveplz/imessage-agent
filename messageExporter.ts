@@ -96,15 +96,13 @@ export async function exportMessageHistory(
     console.log(`📥 Fetching messages from ${phoneNumber}...`);
 
     // Fetch and enhance messages using shared service
-    let messages = await fetchAndEnhanceMessages({
+    // This already filters out reactions and blank messages
+    const messages = await fetchAndEnhanceMessages({
         phoneNumber,
         startDate,
         endDate,
         // No limit - fetch all messages
     });
-
-    // Additional filter: ensure no blank messages slip through
-    messages = messages.filter((msg) => msg.text && msg.text.trim().length > 0);
 
     // Sort newest first
     messages.sort((a, b) => b.date.getTime() - a.date.getTime());
