@@ -15,8 +15,7 @@
     "license": "ISC",
     "dependencies": {
         "@photon-ai/imessage-kit": "^1.0.3",
-        "better-sqlite3": "^12.4.1",
-        "bplist-parser": "^0.3.2"
+        "better-sqlite3": "^12.4.1"
     },
     "devDependencies": {
         "@types/better-sqlite3": "^7.6.13",

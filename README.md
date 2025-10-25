@@ -23,7 +23,7 @@ npm install
     - Restart your terminal
 
 2. **Configure Contact:**
-    - Update `MIRANDA_PHONE_NUMBER` in `index.ts` with your contact's phone number
+    - Update `CONTACT_PHONE_NUMBER` in `index.ts` with your contact's phone number
 
 ## Usage
 
@@ -64,12 +64,28 @@ npm run type-check
 
 This project includes a custom `messageTextEnhancer` module that solves a limitation in the base SDK where SMS messages don't populate the `text` field in newer iOS versions.
 
-**How it works:**
+**The Problem:**
+Starting with macOS Ventura (13.0+), Apple changed how message text is stored:
 
--   SMS text is stored in the `attributedBody` binary field instead of the plain `text` field
--   Our enhancer extracts and parses this binary data to retrieve actual message text
--   Filters out metadata (GUIDs, attribute names, etc.) to show only real message content
--   Works seamlessly with the SDK's message objects
+-   **iMessages**: Text in `message.text` column (works fine)
+-   **SMS messages**: Text in `message.attributedBody` binary BLOB (SDK returns `null`)
+
+**Our Solution:**
+We use LangChain's battle-tested byte pattern matching algorithm to extract text from the `attributedBody` field:
+
+1. Find the `NSString` marker in the binary data
+2. Read the length byte(s) to determine text size
+3. Extract and decode the UTF-8 text
+
+**Key Features:**
+
+-   ✅ Simple, reliable byte pattern matching (no complex parsers)
+-   ✅ Handles both standard and extended length formats
+-   ✅ Production-tested algorithm from LangChain
+-   ✅ Zero external dependencies (uses Node.js Buffer API)
+-   ✅ Graceful error handling (returns `null` on parse failure)
+
+**Reference:** [LangChain Issue #10680](https://github.com/langchain-ai/langchain/issues/10680)
 
 ## Project Structure
 
@@ -87,13 +103,15 @@ imessage-agent/
 Update the phone number in `index.ts`:
 
 ```typescript
-const MIRANDA_PHONE_NUMBER: string = '+1234567890';
+const CONTACT_PHONE_NUMBER: string = '+1234567890';
+const MESSAGE_LIMIT: number = 20;
 ```
 
 ## Known Issues
 
--   Some SMS messages may have truncated or partial text due to binary format complexity
--   Metadata strings may occasionally appear in extracted text (being filtered continuously)
+-   **Reactions/Tapbacks**: Messages like "Loved 'text'" are extracted as text (not filtered)
+-   **Media-only messages**: Photos/videos without text correctly return `null`
+-   **Emoji/Unicode**: Fully supported via UTF-8 decoding
 
 ## Documentation
 

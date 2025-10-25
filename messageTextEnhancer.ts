@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3';
 import { homedir } from 'os';
 import { join } from 'path';
-import * as bplist from 'bplist-parser';
 
 // Define message interface based on SDK's Message type
 interface Message {
@@ -20,149 +19,70 @@ interface Message {
 }
 
 /**
- * Parse binary plist from attributedBody
- */
-function parseBinaryPlist(blob: Buffer): any | null {
-    try {
-        const parsed = bplist.parseBuffer(blob);
-        return parsed && parsed.length > 0 ? parsed[0] : null;
-    } catch (error) {
-        return null;
-    }
-}
-
-/**
- * Recursively search plist object for actual message text
- */
-function findTextInPlist(obj: any, depth: number = 0): string | null {
-    // Prevent infinite recursion
-    if (depth > 10) return null;
-    if (!obj || typeof obj !== 'object') return null;
-
-    // Check if this object has a string value that looks like message text
-    if (typeof obj === 'string') {
-        return isValidMessageText(obj) ? obj : null;
-    }
-
-    // Common keys that might contain the text
-    const textKeys = [
-        'NSString',
-        'NS.string',
-        '__kIMMessagePartAttributeName',
-        'string',
-    ];
-
-    // Try known text keys first
-    for (const key of textKeys) {
-        if (obj[key] && typeof obj[key] === 'string') {
-            const text = obj[key];
-            if (isValidMessageText(text)) return text;
-        }
-    }
-
-    // Recursively search all keys
-    for (const key in obj) {
-        if (obj.hasOwnProperty(key)) {
-            const result = findTextInPlist(obj[key], depth + 1);
-            if (result) return result;
-        }
-    }
-
-    // Check array elements
-    if (Array.isArray(obj)) {
-        for (const item of obj) {
-            const result = findTextInPlist(item, depth + 1);
-            if (result) return result;
-        }
-    }
-
-    return null;
-}
-
-/**
- * Validate if a string is actual message text (not metadata)
- */
-function isValidMessageText(text: string): boolean {
-    if (!text || text.length < 2) return false;
-
-    // Filter out Apple metadata
-    if (text.startsWith('kIM')) return false;
-    if (text.startsWith('NS') && text.includes('Attribute')) return false;
-    if (text.startsWith('__kIM')) return false;
-
-    // Filter out GUIDs
-    if (/^[A-F0-9-]{36}$/i.test(text)) return false;
-
-    // Filter out common metadata patterns
-    if (text.includes('AttributeName')) return false;
-    if (text === 'NSString') return false;
-    if (text === 'NSParagraphStyle') return false;
-
-    // Must contain at least one letter or number
-    if (!/[a-zA-Z0-9]/.test(text)) return false;
-
-    return true;
-}
-
-/**
- * Fallback: Extract text using regex (old method)
- */
-function extractTextWithRegex(blob: Buffer): string | null {
-    try {
-        const str = blob.toString('utf8');
-        const cleaned = str.replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F]/g, ' ');
-        const matches = cleaned.match(/[a-zA-Z0-9\s\.,!?\-'";:()]+/g);
-
-        if (matches && matches.length > 0) {
-            const validSegments = matches
-                .map((m) => m.trim())
-                .filter((m) => {
-                    if (m.length < 4) return false;
-                    if (m.startsWith('kIM')) return false;
-                    if (m.startsWith('NS')) return false;
-                    if (/^[A-F0-9-]{36}$/i.test(m)) return false;
-                    if (m.includes('AttributeName')) return false;
-                    return true;
-                });
-
-            if (validSegments.length === 0) return null;
-
-            const longestSegment = validSegments.reduce((a, b) =>
-                a.length > b.length ? a : b
-            );
-
-            return longestSegment;
-        }
-    } catch (error) {
-        return null;
-    }
-
-    return null;
-}
-
-/**
- * Extract text from attributedBody binary blob
- * SMS messages in newer iOS versions store text here instead of the text field
+ * Extract text from attributedBody using byte pattern matching
+ * Based on LangChain's production-tested algorithm for parsing Apple's typedstream format
+ *
+ * Algorithm:
+ * 1. Find "NSString" marker in binary data (where text begins)
+ * 2. Skip 5 bytes after marker (header data)
+ * 3. Read length byte:
+ *    - If < 129: byte value is the text length
+ *    - If = 129 (0x81): next 2 bytes are length (little-endian 16-bit)
+ * 4. Extract that many bytes and decode as UTF-8
+ *
+ * Reference: https://github.com/langchain-ai/langchain/issues/10680
  */
 function extractTextFromAttributedBody(blob: Buffer | null): string | null {
-    if (!blob) return null;
+    if (!blob || blob.length === 0) return null;
 
     try {
-        // Strategy 1: Parse as binary plist (proper way)
-        const parsed = parseBinaryPlist(blob);
-        if (parsed) {
-            const text = findTextInPlist(parsed);
-            if (text) return text;
+        // Find the NSString marker
+        const markerIndex = blob.indexOf('NSString');
+        if (markerIndex === -1) {
+            // No NSString marker = not a text message
+            return null;
         }
 
-        // Strategy 2: Fallback to regex-based extraction
-        const regexText = extractTextWithRegex(blob);
-        if (regexText) return regexText;
-    } catch (error) {
-        console.error('Error extracting text from attributedBody:', error);
-    }
+        // Skip past "NSString" (8 bytes) + header (5 bytes)
+        const contentStart = markerIndex + 8 + 5;
 
-    return null;
+        // Check if buffer has enough data
+        if (contentStart >= blob.length) {
+            return null;
+        }
+
+        // Read the length byte
+        const lengthByte = blob[contentStart];
+        let textLength: number;
+        let textStart: number;
+
+        if (lengthByte === 0x81) {
+            // Extended length format: next 2 bytes are length (little-endian)
+            if (contentStart + 2 >= blob.length) {
+                return null; // Not enough data
+            }
+            textLength = blob.readUInt16LE(contentStart + 1);
+            textStart = contentStart + 3;
+        } else {
+            // Normal format: byte value is the length
+            textLength = lengthByte;
+            textStart = contentStart + 1;
+        }
+
+        // Check if buffer has enough data for the text
+        if (textStart + textLength > blob.length) {
+            return null;
+        }
+
+        // Extract and decode the text
+        const textBuffer = blob.subarray(textStart, textStart + textLength);
+        const text = textBuffer.toString('utf-8').trim();
+
+        return text.length > 0 ? text : null;
+    } catch (error) {
+        // Parse failed - return null gracefully
+        return null;
+    }
 }
 
 /**
