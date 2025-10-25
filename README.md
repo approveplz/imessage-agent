@@ -22,8 +22,17 @@ npm install
     - Add your terminal app (Terminal.app or iTerm2)
     - Restart your terminal
 
-2. **Configure Contact:**
-    - Update `CONTACT_PHONE_NUMBER` in `index.ts` with your contact's phone number
+2. **Configure Environment Variables:**
+
+    ```bash
+    # Copy the example environment file
+    cp .env.example .env
+
+    # Edit .env and update with your values
+    # CONTACT_PHONE_NUMBER=+1234567890
+    ```
+
+    Update `CONTACT_PHONE_NUMBER` in `.env` with your contact's phone number (include country code).
 
 ## Usage
 
@@ -47,11 +56,11 @@ This will:
 -   Export to `conversation.md`
 
 **Customize export:**
-Edit `export.ts` to change:
 
--   `CONTACT_PHONE_NUMBER`: Phone number to export
--   `OUTPUT_PATH`: Where to save the file
--   `START_DATE` / `END_DATE`: Optional date range filter
+-   Contact: Update `CONTACT_PHONE_NUMBER` in `.env`
+-   Edit `export.ts` to change:
+    -   `OUTPUT_PATH`: Where to save the file
+    -   `START_DATE` / `END_DATE`: Optional date range filter
 
 ### Build
 
@@ -113,8 +122,10 @@ We use LangChain's battle-tested byte pattern matching algorithm to extract text
 
 ```
 imessage-agent/
+├── .env                      # Environment variables (not in git)
+├── .env.example              # Environment template (committed to git)
 ├── types.ts                  # Shared TypeScript interfaces
-├── config.ts                 # Shared configuration constants
+├── config.ts                 # Configuration loader (reads from .env)
 ├── messageService.ts         # Reusable message operations (fetch, filter, etc.)
 ├── messageTextEnhancer.ts    # SMS text extraction from attributedBody
 ├── messageExporter.ts        # Markdown export logic
@@ -127,14 +138,14 @@ imessage-agent/
 
 ## Configuration
 
-Update settings in `config.ts`:
+Configuration is managed through environment variables in `.env`:
 
-```typescript
-export const CONTACT_PHONE_NUMBER: string = '+1234567890';
-export const MESSAGE_LIMIT: number = 20;
+```bash
+# .env
+CONTACT_PHONE_NUMBER=+1234567890
 ```
 
-All scripts (`index.ts`, `export.ts`) will use these shared values.
+This value is loaded in `config.ts` and shared across all scripts (`index.ts`, `export.ts`).
 
 ## Known Issues
 

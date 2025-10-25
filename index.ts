@@ -1,5 +1,8 @@
-import { CONTACT_PHONE_NUMBER, MESSAGE_LIMIT } from './config.js';
+import { CONTACT_PHONE_NUMBER } from './config.js';
 import { fetchAndEnhanceMessages } from './messageService.js';
+
+// Display configuration
+const MESSAGE_LIMIT = 20;
 
 async function main(): Promise<void> {
     console.log('🚀 Starting iMessage Agent...\n');
